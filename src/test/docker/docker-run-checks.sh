@@ -145,7 +145,8 @@ export BUILD_DIR
 export chain_lint
 
 if [[ "$INSTALL_ONLY" == "t" ]]; then
-    docker run --rm \
+    docker run -p 22:22 \
+	--rm \
         --workdir=/usr/src \
         --volume=$TOP:/usr/src \
         ${BUILD_IMAGE} \
@@ -159,7 +160,8 @@ if [[ "$INSTALL_ONLY" == "t" ]]; then
                make -j${JOBS}" \
     || (docker rm tmp.$$; die "docker run of 'make install' failed")
 else
-    docker run --rm \
+    docker run -p 22:22 \
+	--rm \
         --workdir=/usr/src \
         --volume=$TOP:/usr/src \
         $MOUNT_HOME_ARGS \
@@ -199,12 +201,12 @@ else
         --cap-add SYS_PTRACE \
         --tty \
         ${INTERACTIVE:+--interactive} \
-        --network=host \
         ${BUILD_IMAGE} \
         ${INTERACTIVE:-./src/test/checks_run.sh ${CONFIGURE_ARGS}} \
     || die "docker run failed"
 fi
 
+    #    --network=host \
 if test -n "$TAG"; then
     # Re-run 'make install' in fresh image, otherwise we get all
     # the context from the build above
