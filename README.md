@@ -61,9 +61,10 @@ $ flux submit -N2 flux start sleep inf      # Launch another child instance, Ins
 fPhtF4SB
 ```
 
-#### 3. Obtain the URIs for Instance B, which we want to delegate to.
+#### 3. Obtain the URI for Instance B, which we want to delegate to.
 We utilize `flux proxy` and provide it the Job ID to get the instance's local URI,
-and then convert this to a remote URI using `flux uri --remote`.
+and then convert this to a remote URI using `flux uri --remote`. We use the remote URI
+in the next steps.
 
 ```
 $ flux proxy fPhtF4SB flux getattr local-uri                        # Local URI
@@ -111,7 +112,7 @@ flux job attach f7Qv4KHXM
 0.573s: job.exception type=DelegationSuccess severity=0 
 ```
 
-#### 7. View the status of the job from Instance B.
+#### 7. View the results of the job.
 
 There are two ways to view the results of the job that was delegated to Instance B.
 
