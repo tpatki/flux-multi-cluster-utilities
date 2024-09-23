@@ -22,11 +22,12 @@ make && make install
 ```
 The `delegate.so` plugin will be installed in `<install-path>/lib/flux/job-manager/plugins/`.
 
-If no `<install-path>` is specified, it is installed in `flux-multi-cluster-utilities/src/job-manager/plugins/.libs`.
+If an `<install-path>` is specified, it is also installed in `flux-multi-cluster-utilities/src/job-manager/plugins/.libs`.
 
 ### Loading a JobTap Plugin
-The plugin can be loaded with the command:
-`flux jobtap load <path-to-plugin>/delegate.so`
+The plugin can be loaded with the command below. 
+Note that an absolute path needs to be specified here. 
+`flux jobtap load $(realpath path/to/plugin/delegate.so)`
 
 ### Interactive Testing on Peer-to-Peer Flux Instances
 
@@ -42,7 +43,8 @@ Similar steps can be performed on any other cluster.
 flux alloc -N4      # Default resource manager is Flux, e.g. Corona
 salloc -N4          # Default resource manager is SLURM
 ```
-_Note_: If the default resource manager is SLURM, a `flux start -N4` will be needed to start a top-level instance.
+_Note_: If the default resource manager is SLURM, a `flux start` will be needed to start a top-level Flux instance.
+This can be done using `srun -N4 -n4 flux start -N4` or `srun --tasks-per-node=1 flux start` within the SLURM allocation.
 
 #### 2. Create two child flux instances (A and B) and split the resources among them. 
 
