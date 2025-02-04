@@ -29,13 +29,10 @@ The plugin can be loaded with the command below.
 Note that an absolute path needs to be specified here. 
 `flux jobtap load $(realpath path/to/plugin/delegate.so)`
 
-### Interactive Testing on Peer-to-Peer Flux Instances
+### Interactive Testing on Peer-to-Peer Flux Instances on the Same HPC Cluster
 
 Here, we show an example of peer-to-peer flux instances, residing on the same cluster
-and belonging to the same user. Enabling testing across flux instances on different clusters
-is ongoing research. 
-
-This plugin was tested on the Corona cluster across a 4 node allocation.
+and belonging to the same user. This plugin was tested on the Corona cluster across a 4 node allocation.
 Similar steps can be performed on any other cluster. 
 
 #### 1. Obtain an interactive allocation on the desired cluster.
@@ -157,6 +154,32 @@ $ flux job attach f7PiE17dH
 corona189
 corona190
 ```
+
+### Interactive Testing on Flux Instances across Different HPC Clusters
+
+We now show an example of flux instances residing on two distinct HPC clusters. 
+These instances belong to the same user. This example demonstrates launching a job from 
+the Corona cluster (source cluster) to the Tioga cluster (target cluster).
+
+#### 1. Set up SSH configfuration to support ProxyJump to the target cluster.
+
+This can be accomplished by updating the `~/.ssh/config` file as shown below.
+Here, `tioga*` implies that all compute nodes on the Tioga cluster can be reached
+via the intermediate (login) node `tioga`.  
+
+```
+Host tioga*                                            
+     User patki1                                                                 
+     ProxyJump tioga 
+```
+#### 2. Obtain interactive allocations on the two desired clusters (similar to ).
+
+#### 3. Load the jobtap plugin on the source cluster (similar to ).
+
+#### 4. Obtain the remote URI of the target cluster (similar to ).
+
+#### 5. Submit the job from the source cluster to the target cluster using the remote URI of the target cluster.
+
 
 ### Testing Using Docker
 
