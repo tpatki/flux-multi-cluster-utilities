@@ -300,6 +300,7 @@ static int depend_cb (flux_plugin_t *p,
                       flux_plugin_arg_t *args,
                       void *arg)
 {
+
     flux_t *h = flux_jobtap_get_flux (p);
     json_int_t *id;
     flux_t *delegated;
@@ -308,12 +309,14 @@ static int depend_cb (flux_plugin_t *p,
     char *encoded_jobspec = NULL;
     flux_future_t *jobid_future = NULL;
 
+
     if (!h || !(id = malloc (sizeof (json_int_t)))) {
         return flux_jobtap_reject_job (p,
                                        args,
                                        "error processing delegate: %s",
                                        flux_plugin_arg_strerror (args));
     }
+
     if (flux_plugin_arg_unpack (args,
                                 FLUX_PLUGIN_ARG_IN,
                                 "{s:I s:{s:s} s:o}",
@@ -332,6 +335,9 @@ static int depend_cb (flux_plugin_t *p,
                                        "error processing delegate: %s",
                                        flux_plugin_arg_strerror (args));
     }
+
+    flux_log(h, LOG_INFO, "Entered job delegation with URI: %s", uri);
+
     if (!(delegated = flux_open (uri, 0))) {
         flux_log_error (h, "%" JSON_INTEGER_FORMAT ": could not open URI %s", *id, uri);
         return -1;
