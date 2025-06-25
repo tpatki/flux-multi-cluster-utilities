@@ -152,6 +152,7 @@ static int job_validate_cb(flux_plugin_t *p,
              "delegate:%s", selected_uri);
     
     return flux_jobtap_dependency_add(p, id, dependency);
+    
 
     // /* Set delegate.uri attribute for the delegate plugin to use */
     // if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
