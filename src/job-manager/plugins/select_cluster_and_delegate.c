@@ -60,7 +60,7 @@ static int load_config(flux_plugin_t *p, const char *path)
             /* Simple format: just URI strings */
             uri = json_string_value(cluster);
         } else if (json_is_object(cluster)) {
-            /* Object format: {"uri": "...", "name": "..."} */
+            /* Object format: {"uri": "...", "name": "..."} etc. */
             uri = json_string_value(json_object_get(cluster, "uri"));
         }
         
