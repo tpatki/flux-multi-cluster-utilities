@@ -146,29 +146,36 @@ static int job_validate_cb(flux_plugin_t *p,
     
     flux_log(h, LOG_INFO, "Delegating job %ju to %s", id, selected_uri);
     
-    /* Set delegate.uri attribute for the delegate plugin to use */
-    if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
-                            "{s:{s:{s:{s:s}}}}",
-                            "jobspec", "attributes", "system",
-                            "delegate.uri", selected_uri) < 0) {
-        flux_log(h, LOG_ERR, "Failed to set delegate.uri");
-        return -1;
-    }
+    // Add delegate dependency
+    char dependency[1024];
+    snprintf(dependency, sizeof(dependency), 
+             "delegate:%s", selected_uri);
     
-    /* Also set delegate.interactive if this is an interactive job */
-    int interactive = 0;
-    flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
-                          "{s:b}",
-                          "interactive", &interactive);
+    return flux_jobtap_dependency_add(p, id, dependency);
+
+    // /* Set delegate.uri attribute for the delegate plugin to use */
+    // if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
+    //                         "{s:{s:{s:{s:s}}}}",
+    //                         "jobspec", "attributes", "system",
+    //                         "delegate.uri", selected_uri) < 0) {
+    //     flux_log(h, LOG_ERR, "Failed to set delegate.uri");
+    //     return -1;
+    // }
     
-    if (interactive) {
-        flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
-                            "{s:{s:{s:{s:b}}}}",
-                            "jobspec", "attributes", "system",
-                            "delegate.interactive", interactive);
-    }
+    // /* Also set delegate.interactive if this is an interactive job */
+    // int interactive = 0;
+    // flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
+    //                       "{s:b}",
+    //                       "interactive", &interactive);
     
-    return 0;
+    // if (interactive) {
+    //     flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
+    //                         "{s:{s:{s:{s:b}}}}",
+    //                         "jobspec", "attributes", "system",
+    //                         "delegate.interactive", interactive);
+    // }
+    
+ //   return 0;
 }
 
 /* Plugin initialization */
@@ -178,7 +185,7 @@ int flux_plugin_init(flux_plugin_t *p)
     const char *config_path;
     
     /* Set plugin name */
-    if (flux_plugin_set_name(p, "random-cluster-selector") < 0)
+    if (flux_plugin_set_name(p, "select_cluster_and_delegate") < 0)
         return -1;
     
     /* Get config file path */
