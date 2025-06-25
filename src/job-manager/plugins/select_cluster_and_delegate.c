@@ -124,19 +124,20 @@ static int job_validate_cb(flux_plugin_t *p,
         return -1;
     }
     
+    // WE DON'T HAVE ANY delegate.uri stuff.
     /* Check if job already has delegate.uri set (avoid loops) */
-    const char *existing_uri = NULL;
-    flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
-                          "{s:{s:{s:s}}}",
-                          "jobspec", "attributes", "system",
-                          "delegate.uri", &existing_uri);
+    // const char *existing_uri = NULL;
+    // flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
+    //                       "{s:{s:{s:s}}}",
+    //                       "jobspec", "attributes", "system",
+    //                       "delegate.uri", &existing_uri);
     
-    if (existing_uri) {
-        /* Job already delegated, let it pass through */
-        flux_log(h, LOG_DEBUG, "Job %ju already delegated to %s", 
-                 id, existing_uri);
-        return 0;
-    }
+    // if (existing_uri) {
+    //     /* Job already delegated, let it pass through */
+    //     flux_log(h, LOG_DEBUG, "Job %ju already delegated to %s", 
+    //              id, existing_uri);
+    //     return 0;
+    // }
     
     /* Select random cluster */
     const char *selected_uri = select_random_cluster(p);
@@ -153,7 +154,7 @@ static int job_validate_cb(flux_plugin_t *p,
              "delegate:%s", selected_uri);
     
     //return flux_jobtap_dependency_add(p, id, dependency);
-    return flux_jobtap_dependency_add('delegate', id, dependency); //Need to call the delegate module somehow
+    return flux_jobtap_dependency_add('delegate', id, dependency); //Need to call the delegate module somehow?? 
 
     // /* Set delegate.uri attribute for the delegate plugin to use */
     // if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
