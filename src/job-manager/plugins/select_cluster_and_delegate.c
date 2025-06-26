@@ -104,7 +104,7 @@ static const char *select_random_cluster(flux_plugin_t *p)
 
 /* Job validate callback - intercept and redirect */
 //This may need to be job_depend_cb instead as we can only add dependency in the depend state 
-static int job_validate_cb(flux_plugin_t *p,
+static int job_depend_cb(flux_plugin_t *p,
                           const char *topic,
                           flux_plugin_arg_t *args,
                           void *arg)
@@ -153,8 +153,8 @@ static int job_validate_cb(flux_plugin_t *p,
     snprintf(dependency, sizeof(dependency), 
              "delegate:%s", selected_uri);
     
-    //return flux_jobtap_dependency_add(p, id, dependency);
-    return flux_jobtap_dependency_add('delegate', id, dependency); //Need to call the delegate module somehow?? 
+    return flux_jobtap_dependency_add(p, id, dependency);
+    //return flux_jobtap_dependency_add('delegate', id, dependency); //Need to call the delegate module somehow?? 
 
     // /* Set delegate.uri attribute for the delegate plugin to use */
     // if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
@@ -215,8 +215,8 @@ int flux_plugin_init(flux_plugin_t *p)
              "NOTE: Ensure 'delegate' plugin is loaded for delegation to work");
     
     /* Register job validate callback */
-    if (flux_plugin_add_handler(p, "job.validate", 
-                               job_validate_cb, NULL) < 0) {
+    if (flux_plugin_add_handler(p, "job.state.depend", 
+                               job_depend_cb, NULL) < 0) {
         flux_log(h, LOG_ERR, "Failed to register job.validate callback");
         return -1;
     }
