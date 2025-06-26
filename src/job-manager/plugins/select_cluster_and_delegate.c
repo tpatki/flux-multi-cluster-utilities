@@ -153,17 +153,18 @@ static int job_depend_cb(flux_plugin_t *p,
     snprintf(dependency, sizeof(dependency), 
              "delegate:%s", selected_uri);
     
-    return flux_jobtap_dependency_add(p, id, dependency);
+    // return flux_jobtap_dependency_add(p, id, dependency);
     //return flux_jobtap_dependency_add('delegate', id, dependency); //Need to call the delegate module somehow?? 
 
-    // /* Set delegate.uri attribute for the delegate plugin to use */
-    // if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
-    //                         "{s:{s:{s:{s:s}}}}",
-    //                         "jobspec", "attributes", "system",
-    //                         "delegate.uri", selected_uri) < 0) {
-    //     flux_log(h, LOG_ERR, "Failed to set delegate.uri");
-    //     return -1;
-    // }
+    /* Set delegate.uri attribute for the delegate plugin to use */
+    // Figure out how to set the attribute correctly based on the delegate plugin...
+    if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
+                            "{s:{s:{s:{s:s}}}}",
+                            "jobspec", "attributes", "system",
+                            "delegate.uri", selected_uri) < 0) {
+        flux_log(h, LOG_ERR, "Failed to set delegate.uri");
+        return -1;
+    }
     
     // /* Also set delegate.interactive if this is an interactive job */
     // int interactive = 0;
@@ -178,7 +179,7 @@ static int job_depend_cb(flux_plugin_t *p,
     //                         "delegate.interactive", interactive);
     // }
     
- //   return 0;
+    return 0;
 }
 
 /* Plugin initialization */
