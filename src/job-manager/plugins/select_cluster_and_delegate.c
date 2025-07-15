@@ -14,6 +14,11 @@ typedef struct {
 
 static cluster_config_t config = {0};
 
+extern int flux_jobtap_call(flux_plugin_t *p,
+                            flux_jobid_t      id,
+                            const char       *topic,
+                            flux_plugin_arg_t *args);
+
 /* Load cluster URIs from config file */
 static int load_config(flux_plugin_t *p, const char *path)
 {
@@ -102,85 +107,170 @@ static const char *select_random_cluster(flux_plugin_t *p)
     return config.uris[index];
 }
 
-/* Job validate callback - intercept and redirect */
-//This may need to be job_depend_cb instead as we can only add dependency in the depend state 
+
+/* Callback for job.state.depend: inject delegate.uri into jobspec.attributes.system */
 static int job_depend_cb(flux_plugin_t *p,
-                          const char *topic,
-                          flux_plugin_arg_t *args,
-                          void *arg)
+                         const char *topic,
+                         flux_plugin_arg_t *args,
+                         void *arg)
 {
-    flux_t *h = flux_jobtap_get_flux(p);
-    flux_jobid_t id;
-    int urgency;
-    int userid;
-    
-    /* Get job info */
+    flux_t        *h      = flux_jobtap_get_flux(p);
+    flux_jobid_t   id;
+    int            urgency, userid;
+
     if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
                               "{s:I s:i s:i}",
-                              "id", &id,
+                              "id",      &id,
                               "urgency", &urgency,
-                              "userid", &userid) < 0) {
+                              "userid",  &userid) < 0) {
         flux_log(h, LOG_ERR, "Failed to unpack job info");
         return -1;
     }
-    
-    // WE DON'T HAVE ANY delegate.uri stuff.
-    /* Check if job already has delegate.uri set (avoid loops) */
-    // const char *existing_uri = NULL;
-    // flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
-    //                       "{s:{s:{s:s}}}",
-    //                       "jobspec", "attributes", "system",
-    //                       "delegate.uri", &existing_uri);
-    
-    // if (existing_uri) {
-    //     /* Job already delegated, let it pass through */
-    //     flux_log(h, LOG_DEBUG, "Job %ju already delegated to %s", 
-    //              id, existing_uri);
-    //     return 0;
-    // }
-    
-    /* Select random cluster */
+
     const char *selected_uri = select_random_cluster(p);
     if (!selected_uri) {
-        return flux_jobtap_reject_job(p, args, 
+        return flux_jobtap_reject_job(p, args,
                                      "No clusters available for delegation");
     }
-    
-    flux_log(h, LOG_INFO, "Delegating job %ju to %s", id, selected_uri);
-    
-    // Add delegate dependency
-    char dependency[1024];
-    snprintf(dependency, sizeof(dependency), 
-             "delegate:%s", selected_uri);
-    
-    // return flux_jobtap_dependency_add(p, id, dependency);
-    //return flux_jobtap_dependency_add('delegate', id, dependency); //Need to call the delegate module somehow?? 
 
-    /* Set delegate.uri attribute for the delegate plugin to use */
-    // Figure out how to set the attribute correctly based on the delegate plugin...
+    flux_log(h, LOG_INFO, "Delegating job %ju to %s",
+             (uintmax_t)id, selected_uri);
+
     if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
-                            "{s:{s:{s:{s:s}}}}",
-                            "jobspec", "attributes", "system",
-                            "delegate.uri", selected_uri) < 0) {
+                             "{s:{s:{s:{s:s}}}}",
+                             "jobspec", "attributes", "system",
+                             "delegate.uri", selected_uri) < 0) {
         flux_log(h, LOG_ERR, "Failed to set delegate.uri");
         return -1;
     }
-    
-    // /* Also set delegate.interactive if this is an interactive job */
-    // int interactive = 0;
-    // flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
-    //                       "{s:b}",
-    //                       "interactive", &interactive);
-    
-    // if (interactive) {
-    //     flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
-    //                         "{s:{s:{s:{s:b}}}}",
-    //                         "jobspec", "attributes", "system",
-    //                         "delegate.interactive", interactive);
-    // }
-    
+
     return 0;
 }
+
+
+// /* Job validate callback - intercept and redirect */
+// //This may need to be job_depend_cb instead as we can only add dependency in the depend state 
+// static int job_depend_cb1(flux_plugin_t *p,
+//                           const char *topic,
+//                           flux_plugin_arg_t *args,
+//                           void *arg)
+// {
+//     flux_t *h = flux_jobtap_get_flux(p);
+//     flux_jobid_t id;
+//     int urgency;
+//     int userid;
+    
+//     /* Get job info */
+//     if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
+//                               "{s:I s:i s:i}",
+//                               "id", &id,
+//                               "urgency", &urgency,
+//                               "userid", &userid) < 0) {
+//         flux_log(h, LOG_ERR, "Failed to unpack job info");
+//         return -1;
+//     }
+    
+//     // WE DON'T HAVE ANY delegate.uri stuff.
+//     /* Check if job already has delegate.uri set (avoid loops) */
+//     // const char *existing_uri = NULL;
+//     // flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
+//     //                       "{s:{s:{s:s}}}",
+//     //                       "jobspec", "attributes", "system",
+//     //                       "delegate.uri", &existing_uri);
+    
+//     // if (existing_uri) {
+//     //     /* Job already delegated, let it pass through */
+//     //     flux_log(h, LOG_DEBUG, "Job %ju already delegated to %s", 
+//     //              id, existing_uri);
+//     //     return 0;
+//     // }
+    
+//     /* Select random cluster */
+//     const char *selected_uri = select_random_cluster(p);
+//     if (!selected_uri) {
+//         return flux_jobtap_reject_job(p, args, 
+//                                      "No clusters available for delegation");
+//     }
+    
+//     flux_log(h, LOG_INFO, "Delegating job %ju to %s", id, selected_uri);
+    
+//     // Add delegate dependency
+//     char dependency[1024];
+//     snprintf(dependency, sizeof(dependency), 
+//              "delegate:%s", selected_uri);
+    
+//     // return flux_jobtap_dependency_add(p, id, dependency);
+//     //return flux_jobtap_dependency_add('delegate', id, dependency); //Need to call the delegate module somehow?? 
+
+//     /* Set delegate.uri attribute for the delegate plugin to use */
+//     // Figure out how to set the attribute correctly based on the delegate plugin...
+//     if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
+//                             "{s:{s:{s:{s:s}}}}",
+//                             "jobspec", "attributes", "system",
+//                             "delegate.uri", selected_uri) < 0) {
+//         flux_log(h, LOG_ERR, "Failed to set delegate.uri");
+//         return -1;
+//     }
+    
+//     // /* Also set delegate.interactive if this is an interactive job */
+//     // int interactive = 0;
+//     // flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
+//     //                       "{s:b}",
+//     //                       "interactive", &interactive);
+    
+//     // if (interactive) {
+//     //     flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
+//     //                         "{s:{s:{s:{s:b}}}}",
+//     //                         "jobspec", "attributes", "system",
+//     //                         "delegate.interactive", interactive);
+//     // }
+    
+//     return 0;
+// }
+
+/* New callback for job.state.new: calls delegate.submit on the chosen URI */
+static int job_new_cb(flux_plugin_t *p,
+                      const char *topic,
+                      flux_plugin_arg_t *args,
+                      void *arg)
+{
+    flux_jobid_t       id;
+    json_t            *jobspec;
+    const char        *selected_uri;
+    flux_plugin_arg_t *delegate_args;
+    int                rc;
+
+    if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
+                               "{s:I s:o}",
+                               "id",      &id,
+                               "jobspec", &jobspec) < 0) {
+        return -1;
+    }
+
+    selected_uri = select_random_cluster(p);
+    if (!selected_uri) {
+        return -1;
+    }
+
+    delegate_args = flux_plugin_arg_create();
+    if (!delegate_args) {
+        return -1;
+    }
+
+    if (flux_plugin_arg_pack(delegate_args, FLUX_PLUGIN_ARG_IN,
+                             "{s:I s:s s:o}",
+                             "id",      &id,
+                             "uri",     selected_uri,
+                             "jobspec", jobspec) < 0) {
+        flux_plugin_arg_destroy(delegate_args);
+        return -1;
+    }
+
+    rc = flux_jobtap_call(p, id, "delegate.submit", delegate_args);
+    flux_plugin_arg_destroy(delegate_args);
+    return rc;
+}
+
 
 /* Plugin initialization */
 int flux_plugin_init(flux_plugin_t *p)
@@ -222,6 +312,12 @@ int flux_plugin_init(flux_plugin_t *p)
         return -1;
     }
     
+    /* Register job.state.new → job_new_cb */
+    if (flux_plugin_add_handler(p, "job.state.new", job_new_cb, NULL) < 0) {
+        flux_log(h, LOG_ERR, "Failed to register job.state.new callback");
+        return -1;
+    }
+
     return 0;
 }
 

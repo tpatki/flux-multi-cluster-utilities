@@ -374,9 +374,63 @@ static int depend_cb (flux_plugin_t *p,
     return 0;
 }
 
+static int delegate_submit_cb(flux_plugin_t *p,
+                            const char *topic,
+                            flux_plugin_arg_t *args,
+                            void *arg)
+{
+    flux_t *h = flux_jobtap_get_flux(p);
+    json_int_t *id;
+    flux_t *delegated;
+    const char *uri;
+    json_t *jobspec;
+    char *encoded_jobspec = NULL;
+    flux_future_t *jobid_future = NULL;
+    if (!h || !(id = malloc(sizeof(json_int_t)))) {
+        return -1;
+   }
+    // Unpack arguments from select-random-cluster plugin
+    if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
+                              "{s:I s:s s:o}",
+                              "id", id,
+                              "uri", &uri,
+                              "jobspec", &jobspec) < 0) {
+        free(id);
+        return -1;
+   }
+    // Open connection to the target cluster
+    if (!(delegated = flux_open(uri, 0))) {
+        flux_log_error(h, "%" JSON_INTEGER_FORMAT ": could not open URI %s", *id, uri);
+        free(id);
+        return -1;
+   }
+    // Add delegated dependency and store handle (same as in depend_cb)
+    if (flux_jobtap_dependency_add(p, *id, "delegated") < 0
+        || flux_jobtap_job_aux_set(p, *id, "flux::jobid", id, free) < 0
+        || flux_jobtap_job_aux_set(p, *id, "flux::delegated_handle",
+                                  delegated, (flux_free_f)flux_close) < 0
+        || flux_set_reactor(delegated, flux_get_reactor(h)) < 0) {
+        flux_log_error(h, "%" JSON_INTEGER_FORMAT ": setup failed", *id);
+        flux_close(delegated);
+        return -1;
+   }
+    // Submit job and set up callbacks (reuse existing logic)
+    if (!(encoded_jobspec = remove_dependency_and_encode(jobspec))
+        || !(jobid_future = flux_job_submit(delegated, encoded_jobspec, 16, FLUX_JOB_WAITABLE))
+        || flux_future_then(jobid_future, -1, submit_callback, p) < 0
+        || flux_future_aux_set(jobid_future, "flux::jobid", id, NULL) < 0) {
+        flux_log_error(h, "%" JSON_INTEGER_FORMAT ": submission failed", *id);
+        flux_future_destroy(jobid_future);
+        free(encoded_jobspec);
+        return -1;
+   }
+    free(encoded_jobspec);
+    return 0;
+}
+
 static const struct flux_plugin_handler tab[] = {
     {"job.dependency.delegate", depend_cb, NULL},
-    {0},
+    {"delegate.submit", delegate_submit_cb, NULL}, // New callable topic {0},
 };
 
 int flux_plugin_init (flux_plugin_t *p)
