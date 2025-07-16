@@ -374,6 +374,7 @@ static int depend_cb (flux_plugin_t *p,
     return 0;
 }
 
+// Adding this to connect to the select_cluster_and_delegate jobtap plugin
 static int delegate_submit_cb(flux_plugin_t *p,
                             const char *topic,
                             flux_plugin_arg_t *args,
@@ -398,12 +399,15 @@ static int delegate_submit_cb(flux_plugin_t *p,
         free(id);
         return -1;
    }
+
+    // This part is the same as depend_cb, so we may be able to pull this into another function   
     // Open connection to the target cluster
     if (!(delegated = flux_open(uri, 0))) {
         flux_log_error(h, "%" JSON_INTEGER_FORMAT ": could not open URI %s", *id, uri);
         free(id);
         return -1;
    }
+   
     // Add delegated dependency and store handle (same as in depend_cb)
     if (flux_jobtap_dependency_add(p, *id, "delegated") < 0
         || flux_jobtap_job_aux_set(p, *id, "flux::jobid", id, free) < 0
