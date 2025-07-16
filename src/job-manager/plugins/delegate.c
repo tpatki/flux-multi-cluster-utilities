@@ -387,6 +387,9 @@ static int delegate_submit_cb(flux_plugin_t *p,
     json_t *jobspec;
     char *encoded_jobspec = NULL;
     flux_future_t *jobid_future = NULL;
+
+    flux_log(h, LOG_INFO, "Entered the delegate plugin. ");
+
     if (!h || !(id = malloc(sizeof(json_int_t)))) {
         return -1;
    }
@@ -434,7 +437,8 @@ static int delegate_submit_cb(flux_plugin_t *p,
 
 static const struct flux_plugin_handler tab[] = {
     {"job.dependency.delegate", depend_cb, NULL},
-    {"delegate.submit", delegate_submit_cb, NULL}, // New callable topic {0},
+     {"delegate.submit", delegate_submit_cb, NULL}, // New callable topic
+    {0},
 };
 
 int flux_plugin_init (flux_plugin_t *p)

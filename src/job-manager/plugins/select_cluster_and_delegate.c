@@ -109,43 +109,43 @@ static const char *select_random_cluster(flux_plugin_t *p)
 
 
 /* Callback for job.state.depend: inject delegate.uri into jobspec.attributes.system */
-static int job_depend_cb(flux_plugin_t *p,
-                         const char *topic,
-                         flux_plugin_arg_t *args,
-                         void *arg)
-{
-    flux_t        *h      = flux_jobtap_get_flux(p);
-    flux_jobid_t   id;
-    int            urgency, userid;
+// static int job_depend_cb(flux_plugin_t *p,
+//                          const char *topic,
+//                          flux_plugin_arg_t *args,
+//                          void *arg)
+// {
+//     flux_t        *h      = flux_jobtap_get_flux(p);
+//     flux_jobid_t   id;
+//     int            urgency, userid;
 
-    if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
-                              "{s:I s:i s:i}",
-                              "id",      &id,
-                              "urgency", &urgency,
-                              "userid",  &userid) < 0) {
-        flux_log(h, LOG_ERR, "Failed to unpack job info");
-        return -1;
-    }
+//     if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
+//                               "{s:I s:i s:i}",
+//                               "id",      &id,
+//                               "urgency", &urgency,
+//                               "userid",  &userid) < 0) {
+//         flux_log(h, LOG_ERR, "Failed to unpack job info");
+//         return -1;
+//     }
 
-    const char *selected_uri = select_random_cluster(p);
-    if (!selected_uri) {
-        return flux_jobtap_reject_job(p, args,
-                                     "No clusters available for delegation");
-    }
+//     const char *selected_uri = select_random_cluster(p);
+//     if (!selected_uri) {
+//         return flux_jobtap_reject_job(p, args,
+//                                      "No clusters available for delegation");
+//     }
 
-    flux_log(h, LOG_INFO, "Delegating job %ju to %s",
-             (uintmax_t)id, selected_uri);
+//     flux_log(h, LOG_INFO, "Delegating job %ju to %s",
+//              (uintmax_t)id, selected_uri);
 
-    if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
-                             "{s:{s:{s:{s:s}}}}",
-                             "jobspec", "attributes", "system",
-                             "delegate.uri", selected_uri) < 0) {
-        flux_log(h, LOG_ERR, "Failed to set delegate.uri");
-        return -1;
-    }
+//     if (flux_plugin_arg_pack(args, FLUX_PLUGIN_ARG_OUT,
+//                              "{s:{s:{s:{s:s}}}}",
+//                              "jobspec", "attributes", "system",
+//                              "delegate.uri", selected_uri) < 0) {
+//         flux_log(h, LOG_ERR, "Failed to set delegate.uri");
+//         return -1;
+//     }
 
-    return 0;
-}
+//     return 0;
+// }
 
 
 // /* Job validate callback - intercept and redirect */
@@ -239,6 +239,9 @@ static int job_new_cb(flux_plugin_t *p,
     const char        *selected_uri;
     flux_plugin_arg_t *delegate_args;
     int                rc;
+    flux_t        *h      = flux_jobtap_get_flux(p);
+
+    flux_log(h, LOG_ERR, "ENTERED JOB_NEW_CALLBACK.");
 
     if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
                                "{s:I s:o}",
@@ -252,12 +255,15 @@ static int job_new_cb(flux_plugin_t *p,
         return -1;
     }
 
+    flux_log(h, LOG_INFO, "Delegating job %ju to %s",
+             (uintmax_t)id, selected_uri);
+
     delegate_args = flux_plugin_arg_create();
     if (!delegate_args) {
         return -1;
     }
 
-    if (flux_plugin_arg_pack(delegate_args, FLUX_PLUGIN_ARG_IN,
+    if (flux_plugin_arg_pack(delegate_args, FLUX_PLUGIN_ARG_OUT,
                              "{s:I s:s s:o}",
                              "id",      &id,
                              "uri",     selected_uri,
@@ -266,21 +272,38 @@ static int job_new_cb(flux_plugin_t *p,
         return -1;
     }
 
-    rc = flux_jobtap_call(p, id, "delegate.submit", delegate_args);
+    flux_log(h, LOG_INFO, "Calling delegate.submit now. ");
+    rc = flux_jobtap_call(p, FLUX_JOBTAP_CURRENT_JOB, "delegate.submit", delegate_args);
+    
+    if (rc < 0 ) {
+        flux_log(h, LOG_INFO, "JOBTAP_CALL_FAILED.");
+    }
+
     flux_plugin_arg_destroy(delegate_args);
     return rc;
 }
 
+static const struct flux_plugin_handler tab[] = {
+    {"job.new", job_new_cb, NULL},
+    {0},
+};
 
 /* Plugin initialization */
 int flux_plugin_init(flux_plugin_t *p)
 {
     flux_t *h = flux_jobtap_get_flux(p);
+    flux_log(h, LOG_ERR, "ENTERED INIT. NEW START.");
+
+    if (flux_plugin_register (p, "select_cluster_and_delegate", tab) < 0) {
+        flux_log(h, LOG_ERR, "Failed to register select_cluster_and_delegate plugin");
+        return -1;
+    }
+
     const char *config_path;
     
-    /* Set plugin name */
-    if (flux_plugin_set_name(p, "select_cluster_and_delegate") < 0)
-        return -1;
+    // /* Set plugin name */
+    // if (flux_plugin_set_name(p, "select_cluster_and_delegate") < 0)
+    //     return -1;
     
     /* Get config file path */
    //  config_path = flux_plugin_get_conf(p, "config");
@@ -302,23 +325,23 @@ int flux_plugin_init(flux_plugin_t *p)
              config.count);
     
     /* Ensure delegate plugin is loaded */
-    flux_log(h, LOG_INFO, 
-             "NOTE: Ensure 'delegate' plugin is loaded for delegation to work");
+    // flux_log(h, LOG_INFO, 
+    //          "INFO NOTE: Ensure 'delegate' plugin is loaded for delegation to work");
     
-    /* Register job validate callback */
-    if (flux_plugin_add_handler(p, "job.state.depend", 
-                               job_depend_cb, NULL) < 0) {
-        flux_log(h, LOG_ERR, "Failed to register job.validate callback");
-        return -1;
-    }
+    // /* Register job validate callback */
+    // if (flux_plugin_add_handler(p, "job.state.depend", 
+    //                            job_depend_cb, NULL) < 0) {
+    //     flux_log(h, LOG_ERR, "Failed to register job.validate callback");
+    //     return -1;
+    // }
     
-    /* Register job.state.new → job_new_cb */
-    if (flux_plugin_add_handler(p, "job.state.new", job_new_cb, NULL) < 0) {
-        flux_log(h, LOG_ERR, "Failed to register job.state.new callback");
-        return -1;
-    }
-
+    // /* Register job.state.new → job_new_cb */
+    // if (flux_plugin_add_handler(p, "job.state.new", job_new_cb, NULL) < 0) {
+    //     flux_log(h, LOG_ERR, "Failed to register job.state.new callback");
+    //     return -1;
+    // }
     return 0;
+    
 }
 
 /* Plugin cleanup */
