@@ -234,11 +234,11 @@ static int job_new_cb(flux_plugin_t *p,
                       flux_plugin_arg_t *args,
                       void *arg)
 {
-    flux_jobid_t       id;
-    json_t            *jobspec;
-    const char        *selected_uri;
-    flux_plugin_arg_t *delegate_args;
-    int                rc;
+     flux_jobid_t       id;
+     json_t            *jobspec;
+     const char        *selected_uri;
+     flux_plugin_arg_t *delegate_args;
+     int                rc;
     
     flux_t        *h      = flux_jobtap_get_flux(p);
     flux_log_error(h, "ENTERED JOB_NEW_CALLBACK.");
@@ -250,18 +250,21 @@ static int job_new_cb(flux_plugin_t *p,
         return -1;
     }
 
-    selected_uri = select_random_cluster(p);
-    if (!selected_uri) {
-        return -1;
-    }
+     selected_uri = select_random_cluster(p);
+     flux_log(h, LOG_INFO, "selected uri %s", selected_uri);
+     flux_log(h, LOG_INFO, "selected id is %ld", id);
+     // flux_log(h, LOG_INFO, "jobspec is %s", json_dumps((json_t*) jobspec));
+    // if (!selected_uri) {
+    //     return -1;
+    // }
 
-    flux_log_error(h, "Delegating job %ju to %s",
-             (uintmax_t)id, selected_uri);
+    // flux_log_error(h, "Delegating job %ju to %s",
+    //          (uintmax_t)id, selected_uri);
 
-    delegate_args = flux_plugin_arg_create();
-    if (!delegate_args) {
-        return -1;
-    }
+     delegate_args = flux_plugin_arg_create();
+    // if (!delegate_args) {
+    //     return -1;
+    // }
 
     if (flux_plugin_arg_pack(delegate_args, FLUX_PLUGIN_ARG_OUT,
                              "{s:I s:s s:o}",
@@ -272,15 +275,16 @@ static int job_new_cb(flux_plugin_t *p,
         return -1;
     }
 
-    flux_log_error(h, "Calling delegate.submit now. ");
-    // rc = flux_jobtap_call(p, FLUX_JOBTAP_CURRENT_JOB, "delegate.submit", delegate_args);
-    rc = flux_jobtap_call(p, id, "delegate.submit", delegate_args);
+    // flux_log_error(h, "Calling delegate.submit now. ");
+    rc =0;
+    rc = flux_jobtap_call(p, FLUX_JOBTAP_CURRENT_JOB, "delegate.submit", delegate_args);
+    // rc = flux_jobtap_call(p, id, "delegate.submit", delegate_args);
     
-    if (rc < 0 ) {
-        flux_log_error(h, "JOBTAP_CALL_FAILED.");
-    }
+    // if (rc < 0 ) {
+    //     flux_log_error(h, "JOBTAP_CALL_FAILED.");
+    // }
 
-    flux_plugin_arg_destroy(delegate_args);
+    // flux_plugin_arg_destroy(delegate_args);
     return rc;
 }
 
