@@ -239,9 +239,9 @@ static int job_new_cb(flux_plugin_t *p,
     const char        *selected_uri;
     flux_plugin_arg_t *delegate_args;
     int                rc;
+    
     flux_t        *h      = flux_jobtap_get_flux(p);
-
-    flux_log(h, LOG_ERR, "ENTERED JOB_NEW_CALLBACK.");
+    flux_log_error(h, "ENTERED JOB_NEW_CALLBACK.");
 
     if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
                                "{s:I s:o}",
@@ -255,7 +255,7 @@ static int job_new_cb(flux_plugin_t *p,
         return -1;
     }
 
-    flux_log(h, LOG_INFO, "Delegating job %ju to %s",
+    flux_log_error(h, "Delegating job %ju to %s",
              (uintmax_t)id, selected_uri);
 
     delegate_args = flux_plugin_arg_create();
@@ -272,11 +272,12 @@ static int job_new_cb(flux_plugin_t *p,
         return -1;
     }
 
-    flux_log(h, LOG_INFO, "Calling delegate.submit now. ");
-    rc = flux_jobtap_call(p, FLUX_JOBTAP_CURRENT_JOB, "delegate.submit", delegate_args);
+    flux_log_error(h, "Calling delegate.submit now. ");
+    // rc = flux_jobtap_call(p, FLUX_JOBTAP_CURRENT_JOB, "delegate.submit", delegate_args);
+    rc = flux_jobtap_call(p, id, "delegate.submit", delegate_args);
     
     if (rc < 0 ) {
-        flux_log(h, LOG_INFO, "JOBTAP_CALL_FAILED.");
+        flux_log_error(h, "JOBTAP_CALL_FAILED.");
     }
 
     flux_plugin_arg_destroy(delegate_args);

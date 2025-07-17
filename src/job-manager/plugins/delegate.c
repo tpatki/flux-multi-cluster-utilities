@@ -388,11 +388,12 @@ static int delegate_submit_cb(flux_plugin_t *p,
     char *encoded_jobspec = NULL;
     flux_future_t *jobid_future = NULL;
 
-    flux_log(h, LOG_INFO, "Entered the delegate plugin. ");
-
     if (!h || !(id = malloc(sizeof(json_int_t)))) {
         return -1;
    }
+
+   flux_log_error(h, "Entered the delegate plugin."); 
+
     // Unpack arguments from select-random-cluster plugin
     if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
                               "{s:I s:s s:o}",
@@ -403,6 +404,8 @@ static int delegate_submit_cb(flux_plugin_t *p,
         return -1;
    }
 
+    flux_log_error(h, "Entered the delegate plugin with URI"); // %s. ", uri);
+
     // This part is the same as depend_cb, so we may be able to pull this into another function   
     // Open connection to the target cluster
     if (!(delegated = flux_open(uri, 0))) {
@@ -411,6 +414,8 @@ static int delegate_submit_cb(flux_plugin_t *p,
         return -1;
    }
    
+    flux_log_error(h, "DELEGATE PLUGIN: Add dependency");
+
     // Add delegated dependency and store handle (same as in depend_cb)
     if (flux_jobtap_dependency_add(p, *id, "delegated") < 0
         || flux_jobtap_job_aux_set(p, *id, "flux::jobid", id, free) < 0
@@ -421,6 +426,9 @@ static int delegate_submit_cb(flux_plugin_t *p,
         flux_close(delegated);
         return -1;
    }
+
+     flux_log_error(h, "DELEGATE PLUGIN: Remove dependency and encode, submit job");
+
     // Submit job and set up callbacks (reuse existing logic)
     if (!(encoded_jobspec = remove_dependency_and_encode(jobspec))
         || !(jobid_future = flux_job_submit(delegated, encoded_jobspec, 16, FLUX_JOB_WAITABLE))
