@@ -180,6 +180,7 @@ static int job_new_cb (flux_plugin_t *p,
         flux_log(h, LOG_ERR, "JOBTAP_CALL_FAILED.");
     }
     
+    flux_log(h, LOG_INFO, "Exiting from select_cluster_and_delegate.c.");
     //Clean up
     flux_plugin_arg_destroy(delegate_args);
     return rc;

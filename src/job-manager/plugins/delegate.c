@@ -435,38 +435,71 @@ static int delegate_submit_cb (flux_plugin_t *p,
         return -1;
     }
 
-    if (flux_jobtap_dependency_add (p, *id, "delegated") < 0
-        || flux_jobtap_job_aux_set (p,
-                                    *id,
-                                    "flux::delegated_handle",
-                                    delegated,
-                                    (flux_free_f)flux_close)
-               < 0
-        || flux_set_reactor (delegated, flux_get_reactor (h)) < 0) {
-        flux_log (h, LOG_ERR, "%" JSON_INTEGER_FORMAT ": flux_jobtap_dependency_add", *id);
-        flux_close (delegated);
-        return -1;
-    }
+    // if (flux_jobtap_dependency_add (p, *id, "delegated") < 0
+    //      || flux_jobtap_job_aux_set (p,
+    //                                 *id,
+    //                                 "flux::delegated_handle",
+    //                                 delegated,
+    //                                 (flux_free_f)flux_close)
+    //            < 0
+    //     || flux_set_reactor (delegated, flux_get_reactor (h)) < 0) {
+    //     flux_log (h, LOG_ERR, "%" JSON_INTEGER_FORMAT ": flux_jobtap_set_delegation", *id);
+    //     flux_close (delegated);
+    //     return -1;
+    // }
+
+    // flux_log(h, LOG_INFO, "After adding dependency, the jobspec looks like %s", json_dumps(jobspec, 0));
     
     // submit the job to the specified instance and attach a callback for fetching the
     // ID
-    if (!(encoded_jobspec = remove_dependency_and_encode (jobspec))
-        || !(jobid_future =
-                 flux_job_submit (delegated, encoded_jobspec, 16, FLUX_JOB_WAITABLE))
-        || flux_future_then (jobid_future, -1, submit_callback, p) < 0
-        || flux_future_aux_set (jobid_future, "flux::jobid", id, NULL) < 0) {
-        flux_log (h, 
-                        LOG_ERR, 
-                        "%" JSON_INTEGER_FORMAT
-                        ": could not delegate job to specified Flux "
-                        "instance",
-                        *id);
+    // FAILS HERE WHEN ARRIVING FROM THE SELECT PLUGIN, BECAUSE THERE IS NO DEPENDENCY IN THE JOB.
+    // if (!(encoded_jobspec = remove_dependency_and_encode (jobspec))) {
+    //     flux_log_error(h, "Failed in remove dependency and encode. Need to debug.");
+    //     flux_future_destroy (jobid_future);
+    //     free (encoded_jobspec);
+    //     return -1;
+    // }
+    // if (flux_jobtap_dependency_remove(p, *id, "delegated") < 0) {
+    //      flux_log (h, LOG_ERR, "%" JSON_INTEGER_FORMAT ": could not remove dependency", *id);
+    //     flux_close (delegated);
+    //     return -1;
+    // }
+
+    encoded_jobspec = json_dumps(jobspec, 0);
+    
+    if (!(jobid_future = flux_job_submit (delegated, encoded_jobspec, 16, FLUX_JOB_WAITABLE))) {
+        flux_log_error(h, "Failed in flux job submit.");
         flux_future_destroy (jobid_future);
         free (encoded_jobspec);
         return -1;
     }
 
+    if (flux_future_then (jobid_future, -1, submit_callback, p) < 0) {
+        flux_log_error(h, "Failed in flux future then and setting submit callback");
+        flux_future_destroy (jobid_future);
+        free (encoded_jobspec);
+        return -1;
+    }
+
+    if(flux_future_aux_set (jobid_future, "flux::jobid", id, NULL) < 0) {
+        flux_log_error(h, "Failed in flux future then and setting submit callback");
+        flux_future_destroy (jobid_future);
+        free (encoded_jobspec);
+        return -1;
+    }
+    //     flux_log (h, 
+    //                     LOG_ERR, 
+    //                     "%" JSON_INTEGER_FORMAT
+    //                     ": could not delegate job to specified Flux "
+    //                     "instance",
+    //                     *id);
+    //     flux_future_destroy (jobid_future);
+    //     free (encoded_jobspec);
+    //     return -1;
+    // }
     free (encoded_jobspec);
+
+    flux_log(h, LOG_INFO, "Exiting from delegate.c.");
     return 0;
 }
 
