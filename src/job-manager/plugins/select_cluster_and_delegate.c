@@ -168,8 +168,13 @@ static int job_new_cb (flux_plugin_t *p,
         return -1;
     }
 
+    char** json_str = malloc(sizeof(json_t));
+    flux_plugin_arg_get(delegate_args, FLUX_PLUGIN_ARG_OUT, json_str);
+    flux_log(h, LOG_INFO, "Trying to get args %s", *json_str);
+
     flux_log(h, LOG_INFO, "Calling delegate.submit now. ");
     rc = flux_jobtap_call(p, FLUX_JOBTAP_CURRENT_JOB, "delegate.submit", delegate_args);
+ // rc = 0;
      // rc = flux_jobtap_call(p, (flux_jobid_t)id, "delegate.submit", delegate_args);
     if (rc < 0 ) {
         flux_log(h, LOG_ERR, "JOBTAP_CALL_FAILED.");

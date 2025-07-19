@@ -385,11 +385,16 @@ static int delegate_submit_cb (flux_plugin_t *p,
     flux_log(h, LOG_INFO, "Entered job delegation plugin.");
 
     json_int_t *id;
+    json_int_t val;
     flux_t *delegated;
     const char *uri;
     json_t *jobspec;
     char *encoded_jobspec = NULL;
     flux_future_t *jobid_future = NULL;
+
+    char** json_str = malloc(sizeof(json_t));
+    flux_plugin_arg_get(args, FLUX_PLUGIN_ARG_OUT, json_str);
+    flux_log(h, LOG_INFO, "DELEGATE: Trying to get args %s", *json_str);
 
     if (!h || !(id = malloc (sizeof (json_int_t)))) {
         flux_log_error(h, "Failed initial check.");
@@ -399,33 +404,23 @@ static int delegate_submit_cb (flux_plugin_t *p,
                                        flux_plugin_arg_strerror (args));
     }
 
-    if (args == NULL)
-    {
-         flux_log_error(h, "Phew. Unpacking nothing here.");
-         return -1;    
-    }
 
-    char *s; 
-    flux_plugin_arg_get(args, FLUX_PLUGIN_ARG_IN, &s);
-    
-    flux_log(h, LOG_INFO, "DUMPING ARGS %s", s);
-
-
-   if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
-                              "{s:I}",
-                              "id", id) < 0) {
-        flux_log_error(h, "Failed during unpacking ID.");      
-        return -1;
-    }
-
-
-    if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
+    if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_OUT,
                               "{s:I s:s s:o}",
-                              "id", id,
+                              "id", &val,
                               "uri", &uri,
-                              "jobspec", &jobspec) < 0 
-        || flux_jobtap_job_aux_set (p, *id, "flux::jobid", id, free) < 0) {
-            flux_log_error(h, "Failed during unpacking.");
+                              "jobspec", &jobspec) < 0) {
+         flux_log_error(h, "Failed during unpacking.");   
+         return flux_jobtap_reject_job (p,
+                                       args,
+                                       "error processing delegate: %s",
+                                       flux_plugin_arg_strerror (args));                     
+    } 
+    
+    *id = val;
+
+    if (flux_jobtap_job_aux_set (p, *id, "flux::jobid", id, free) < 0) {
+            flux_log_error(h, "Failed during aux set.");
             free (id);
             return flux_jobtap_reject_job (p,
                                        args,
