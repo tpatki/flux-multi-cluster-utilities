@@ -129,7 +129,7 @@ static int job_new_cb (flux_plugin_t *p,
                                        flux_plugin_arg_strerror (args));
     }
 
-    flux_log(h, LOG_INFO, "ENTERED JOB_NEW_CALLBACK.");
+    flux_log(h, LOG_INFO, "SELECT PLUGIN: ENTERED JOB_DEPEND_CALLBACK.");
 
     if (flux_plugin_arg_unpack(args, FLUX_PLUGIN_ARG_IN,
                                "{s:I s:o}",
@@ -170,9 +170,9 @@ static int job_new_cb (flux_plugin_t *p,
 
     char** json_str = malloc(sizeof(json_t));
     flux_plugin_arg_get(delegate_args, FLUX_PLUGIN_ARG_OUT, json_str);
-    flux_log(h, LOG_INFO, "Trying to get args %s", *json_str);
+    flux_log(h, LOG_INFO, "Sending %s", *json_str);
 
-    flux_log(h, LOG_INFO, "Calling delegate.submit now. ");
+    flux_log(h, LOG_INFO, " FLUX JOBTAP CALL. Calling delegate.submit now. ");
     rc = flux_jobtap_call(p, FLUX_JOBTAP_CURRENT_JOB, "delegate.submit", delegate_args);
  // rc = 0;
      // rc = flux_jobtap_call(p, (flux_jobid_t)id, "delegate.submit", delegate_args);
@@ -187,7 +187,7 @@ static int job_new_cb (flux_plugin_t *p,
 }
 
 static const struct flux_plugin_handler tab[] = {
-    {"job.new", job_new_cb, NULL},
+    {"job.state.depend", job_new_cb, NULL},
     {0},
 };
 

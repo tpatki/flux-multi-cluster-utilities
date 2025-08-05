@@ -382,7 +382,7 @@ static int delegate_submit_cb (flux_plugin_t *p,
                       void *arg)
 {
     flux_t *h = flux_jobtap_get_flux (p);
-    flux_log(h, LOG_INFO, "Entered job delegation plugin.");
+    flux_log(h, LOG_INFO, "ENTERED JOB DELEGATE PLUGIN.");
 
     json_int_t *id;
     json_int_t val;
@@ -394,7 +394,7 @@ static int delegate_submit_cb (flux_plugin_t *p,
 
     char** json_str = malloc(sizeof(json_t));
     flux_plugin_arg_get(args, FLUX_PLUGIN_ARG_OUT, json_str);
-    flux_log(h, LOG_INFO, "DELEGATE: Trying to get args %s", *json_str);
+    flux_log(h, LOG_INFO, "DELEGATE: Recd args %s", *json_str);
 
     if (!h || !(id = malloc (sizeof (json_int_t)))) {
         flux_log_error(h, "Failed initial check.");
@@ -435,18 +435,19 @@ static int delegate_submit_cb (flux_plugin_t *p,
         return -1;
     }
 
-    // if (flux_jobtap_dependency_add (p, *id, "delegated") < 0
-    //      || flux_jobtap_job_aux_set (p,
-    //                                 *id,
-    //                                 "flux::delegated_handle",
-    //                                 delegated,
-    //                                 (flux_free_f)flux_close)
-    //            < 0
-    //     || flux_set_reactor (delegated, flux_get_reactor (h)) < 0) {
-    //     flux_log (h, LOG_ERR, "%" JSON_INTEGER_FORMAT ": flux_jobtap_set_delegation", *id);
-    //     flux_close (delegated);
-    //     return -1;
-    // }
+    flux_log(h, LOG_INFO, "Flux open on URI succeeded. Adding dependency, jobtap_job_aux_set and flux_set_reactor");
+    if (flux_jobtap_dependency_add (p, *id, "delegated") < 0
+         || flux_jobtap_job_aux_set (p,
+                                    *id,
+                                    "flux::delegated_handle",
+                                    delegated,
+                                    (flux_free_f)flux_close)
+               < 0
+        || flux_set_reactor (delegated, flux_get_reactor (h)) < 0) {
+        flux_log (h, LOG_ERR, "%" JSON_INTEGER_FORMAT ": flux_jobtap_set_delegation", *id);
+        flux_close (delegated);
+        return -1;
+    }
 
     // flux_log(h, LOG_INFO, "After adding dependency, the jobspec looks like %s", json_dumps(jobspec, 0));
     
@@ -459,13 +460,17 @@ static int delegate_submit_cb (flux_plugin_t *p,
     //     free (encoded_jobspec);
     //     return -1;
     // }
-    // if (flux_jobtap_dependency_remove(p, *id, "delegated") < 0) {
-    //      flux_log (h, LOG_ERR, "%" JSON_INTEGER_FORMAT ": could not remove dependency", *id);
-    //     flux_close (delegated);
-    //     return -1;
-    // }
+
+    flux_log(h, LOG_INFO, "DELEGATE: removing dependency.");
+    if (flux_jobtap_dependency_remove(p, *id, "delegated") < 0) {
+        flux_log (h, LOG_ERR, "%" JSON_INTEGER_FORMAT ": could not remove dependency", *id);
+        flux_close (delegated);
+        return -1;
+    }
 
     encoded_jobspec = json_dumps(jobspec, 0);
+    
+    flux_log(h, LOG_INFO, "DELEGATE: call flux_job_submit.");
     
     if (!(jobid_future = flux_job_submit (delegated, encoded_jobspec, 16, FLUX_JOB_WAITABLE))) {
         flux_log_error(h, "Failed in flux job submit.");
@@ -473,6 +478,7 @@ static int delegate_submit_cb (flux_plugin_t *p,
         free (encoded_jobspec);
         return -1;
     }
+    flux_log(h, LOG_INFO, "DELEGATE: flux_future_then and callback for when job is submitted.");
 
     if (flux_future_then (jobid_future, -1, submit_callback, p) < 0) {
         flux_log_error(h, "Failed in flux future then and setting submit callback");
@@ -499,7 +505,7 @@ static int delegate_submit_cb (flux_plugin_t *p,
     // }
     free (encoded_jobspec);
 
-    flux_log(h, LOG_INFO, "Exiting from delegate.c.");
+    flux_log(h, LOG_INFO, "No reported failures, successful delegation calls. Exiting from delegate.c.");
     return 0;
 }
 
