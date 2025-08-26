@@ -108,7 +108,7 @@ static const char *select_random_cluster(flux_plugin_t *p)
 }
 
 /* Callback for job.state.new: calls delegate.submit on the chosen URI */
-static int job_new_cb (flux_plugin_t *p,
+static int job_depend_cb (flux_plugin_t *p,
                       const char *topic,
                       flux_plugin_arg_t *args,
                       void *arg)
@@ -187,7 +187,7 @@ static int job_new_cb (flux_plugin_t *p,
 }
 
 static const struct flux_plugin_handler tab[] = {
-    {"job.state.depend", job_new_cb, NULL},
+    {"job.state.depend", job_depend_cb, NULL},
     {0},
 };
 
@@ -230,7 +230,7 @@ int flux_plugin_init(flux_plugin_t *p)
     return 0;
     }
 
-/* Plugin cleanup */
+/* Plugin cleanup...  Figure out where to call this. */
 void flux_plugin_fini(flux_plugin_t *p)
 {
     /* Free allocated memory */
