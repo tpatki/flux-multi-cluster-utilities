@@ -121,13 +121,22 @@ static int eventlog_entry_parse (json_t *entry,
 static void wait_callback (flux_future_t *f, void *arg)
 {
     flux_plugin_t *p = arg;
+    flux_t *h; 
     json_int_t *id;
+    flux_jobid_t job_id; 
     bool success;
     const char *errstr;
+
+    if (!(h = flux_future_aux_get (f, "flux::handle"))) {
+        return;
+    }
 
     if (!(id = flux_future_aux_get (f, "flux::jobid"))) {
         return;
     }
+
+    job_id = (flux_jobid_t)*id;
+
     if (flux_job_wait_get_status (f, &success, &errstr) < 0) {
         flux_jobtap_raise_exception (p,
                                      *id,
@@ -136,17 +145,75 @@ static void wait_callback (flux_future_t *f, void *arg)
                                      "Could not fetch result of job");
         return;
     }
-    if (success) {
-        flux_jobtap_raise_exception (p, *id, "DelegationSuccess", 0, "");
-    } else {
+    if (success) { // Delegated job has succeeded on the specified instance
+        // This is where we need to make changes to report success (post the alloc, start and finish events here.)
+         flux_log_error (h, "Entering our new state change tests");  
+        // Post an alloc event with bypass=true
+            if (flux_future_get (f, NULL) < 0) {
+                flux_jobtap_raise_exception (p,
+                                            *id,
+                                            "alloc", 0,
+                                            "failed to commit R to kvs: %s",
+                                            strerror (errno));
+                flux_future_destroy (f);
+            }
+            if (flux_jobtap_event_post_pack (p,
+                                            *id,
+                                            "alloc",
+                                            "{s:b}",
+                                            "bypass", true) < 0) {
+                        flux_jobtap_raise_exception (p,
+                                                 *id,
+                                                "alloc", 0,
+                                                "failed to post alloc event: %s",
+                                                strerror (errno));
+                        flux_future_destroy (f);
+            }
+    // Post start and finish RPC to job-exec
+            //payload: {"event": "start", "jobid": args.jobid}
+            char *payload_start = malloc (4096 * sizeof(char)); 
+            sprintf (payload_start, "{\"event\": \"start\", \"jobid\": %" PRIu64 "}", job_id);
+            flux_log_error (h, "start payload is: %s", payload_start);
+            
+            if (!(f = flux_rpc (h,
+                        "job-exec.override",
+                        payload_start,
+                        FLUX_NODEID_ANY,
+                        FLUX_RPC_STREAMING))) {
+                    flux_log_error (h, "flux_rpc %s", "job-exec.override: start");
+            }
+            
+            free (payload_start); 
+
+            char *payload_finish = malloc (4096 * sizeof(char)); 
+            int status = 0; //Assume success
+            sprintf (payload_finish, "{\"event\": \"finish\", \"jobid\": %" PRIu64 ", \"status\": %d}", job_id, status);
+            flux_log_error (h, "finish payload is: %s", payload_finish);   
+
+            if (!(f = flux_rpc (h,
+                        "job-exec.override",
+                        payload_finish,
+                        FLUX_NODEID_ANY,
+                        FLUX_RPC_STREAMING))) {
+                    flux_log_error (h, "flux_rpc %s", "job-exec.override: finish");
+                }
+
+                // DO a status check here to see if the RPC was successful.
+            free (payload_finish);
+
+    // Old, where we post an exception to force cleanup.        
+    //    flux_jobtap_raise_exception (p, *id, "DelegationSuccess", 0, "");
+    } 
+    else { //Delegated job has failed on the specified instance.
         flux_jobtap_raise_exception (p,
                                      *id,
                                      "DelegationFailure",
                                      0,
                                      "errstr %s",
                                      errstr);
-    }
-    flux_future_destroy (f);
+        }    
+    flux_future_destroy (f); //Need to change this later...
+        //}
 }
 
 /*
