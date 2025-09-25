@@ -131,6 +131,9 @@ static void wait_callback (flux_future_t *f, void *arg)
         return;
     }
 
+    flux_log (h, LOG_INFO, "wait_callback: entering new state change tests."); 
+
+
     if (!(id = flux_future_aux_get (f, "flux::jobid"))) {
         return;
     }
@@ -147,7 +150,7 @@ static void wait_callback (flux_future_t *f, void *arg)
     }
     if (success) { // Delegated job has succeeded on the specified instance
         // This is where we need to make changes to report success (post the alloc, start and finish events here.)
-         flux_log_error (h, "Entering our new state change tests");  
+         flux_log (h, LOG_INFO, "Success: Entering our new state change tests");  
         // Post an alloc event with bypass=true
             if (flux_future_get (f, NULL) < 0) {
                 flux_jobtap_raise_exception (p,
@@ -157,6 +160,7 @@ static void wait_callback (flux_future_t *f, void *arg)
                                             strerror (errno));
                 flux_future_destroy (f);
             }
+            
             if (flux_jobtap_event_post_pack (p,
                                             *id,
                                             "alloc",
@@ -169,37 +173,51 @@ static void wait_callback (flux_future_t *f, void *arg)
                                                 strerror (errno));
                         flux_future_destroy (f);
             }
-    // Post start and finish RPC to job-exec
-            //payload: {"event": "start", "jobid": args.jobid}
+    // // Post start and finish RPC to job-exec override 
+    //         //payload: {"event": "start", "jobid": args.jobid}
             char *payload_start = malloc (4096 * sizeof(char)); 
             sprintf (payload_start, "{\"event\": \"start\", \"jobid\": %" PRIu64 "}", job_id);
-            flux_log_error (h, "start payload is: %s", payload_start);
-            
+    //         // flux_log_error (h, "start payload is: %s", payload_start); 
+
             if (!(f = flux_rpc (h,
                         "job-exec.override",
-                        payload_start,
+                        payload_start, 
                         FLUX_NODEID_ANY,
                         FLUX_RPC_STREAMING))) {
-                    flux_log_error (h, "flux_rpc %s", "job-exec.override: start");
+                                flux_log_error (h, "flux_rpc %s", "failed: job-exec.override: start");
+                                flux_future_destroy (f);
             }
+
+            // if (!(f = flux_rpc_pack (h,
+            //             "job-exec.override",
+            //             FLUX_NODEID_ANY,
+            //             FLUX_RPC_STREAMING, "{s:s s:I}", "event", "start", "jobid", (json_int_t)job_id))) {
+            //         flux_log_error (h, "flux_rpc %s", "failed: job-exec.override: start");
+            //         flux_future_destroy (f);
+            // }
+    //         else {
+    //             flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: start");
+    //         }
             
-            free (payload_start); 
+    //         // free (payload_start); 
 
-            char *payload_finish = malloc (4096 * sizeof(char)); 
-            int status = 0; //Assume success
-            sprintf (payload_finish, "{\"event\": \"finish\", \"jobid\": %" PRIu64 ", \"status\": %d}", job_id, status);
-            flux_log_error (h, "finish payload is: %s", payload_finish);   
+    //         // char *payload_finish = malloc (4096 * sizeof(char)); 
+    //          int status = 0; //Assume success
+    //         // sprintf (payload_finish, "{\"event\": \"finish\", \"jobid\": %" PRIu64 ", \"status\": %d}", job_id, status);
+    //         // flux_log_error (h, "finish payload is: %s", payload_finish);   
 
-            if (!(f = flux_rpc (h,
-                        "job-exec.override",
-                        payload_finish,
-                        FLUX_NODEID_ANY,
-                        FLUX_RPC_STREAMING))) {
-                    flux_log_error (h, "flux_rpc %s", "job-exec.override: finish");
-                }
-
+    //         if (!(f = flux_rpc_pack (h,
+    //                     "job-exec.override",
+    //                     FLUX_NODEID_ANY,
+    //                     FLUX_RPC_STREAMING, "{s:s s:I s:i}", "event", "finish", "jobid", (json_int_t)job_id, "status", status))) {
+    //                 flux_log (h, LOG_INFO, "flux_rpc %s", "job-exec.override: finish");
+    //                 flux_future_destroy (f);
+    //             }
+    //         else {
+    //             flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: finish");
+    //         }
                 // DO a status check here to see if the RPC was successful.
-            free (payload_finish);
+          //  free (payload_finish);
 
     // Old, where we post an exception to force cleanup.        
     //    flux_jobtap_raise_exception (p, *id, "DelegationSuccess", 0, "");
