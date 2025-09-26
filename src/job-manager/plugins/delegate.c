@@ -148,6 +148,8 @@ static void wait_callback (flux_future_t *f, void *arg)
         // This is where we need to make changes to report success (post the alloc, start and finish events here.)
          flux_log (h, LOG_INFO, "wait_callback success: Entering our new state change tests");  
         // Post an alloc event with bypass=true
+        // Need to create a fake R here for alloc... 
+        
             if (flux_future_get (f, NULL) < 0) {
                 flux_jobtap_raise_exception (p,
                                             *id,
