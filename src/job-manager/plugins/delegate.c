@@ -152,7 +152,7 @@ static void wait_callback (flux_future_t *f, void *arg)
                 flux_jobtap_raise_exception (p,
                                             *id,
                                             "alloc", 0,
-                                            "failed to commit R to kvs: %s",
+                                            "failed to obtain future: %s",
                                             strerror (errno));
                 flux_future_destroy (f);
             }
@@ -169,7 +169,8 @@ static void wait_callback (flux_future_t *f, void *arg)
                                                 strerror (errno));
                         flux_future_destroy (f);
             }
-    // Post start and finish RPC to job-exec override 
+
+            // Post start and finish RPC to job-exec override 
              //payload: {"event": "start", "jobid": args.jobid}
             char *payload_start = malloc (4096 * sizeof(char)); 
             sprintf (payload_start, "{\"event\": \"start\", \"jobid\": %" PRIu64 "}", job_id);
@@ -179,9 +180,12 @@ static void wait_callback (flux_future_t *f, void *arg)
                         "job-exec.override",
                         payload_start, 
                         FLUX_NODEID_ANY,
-                        FLUX_RPC_STREAMING))) {
+                        0))) {
                                 flux_log (h, LOG_ERR, "flux_rpc %s", "failed: job-exec.override: start");
                                 flux_future_destroy (f);
+            }
+            else {
+                flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: start");
             }
 
             // if (!(f = flux_rpc_pack (h,
@@ -191,9 +195,7 @@ static void wait_callback (flux_future_t *f, void *arg)
             //         flux_log_error (h, "flux_rpc %s", "failed: job-exec.override: start");
             //         flux_future_destroy (f);
             // }
-    //         else {
-    //             flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: start");
-    //         }
+   
             
             free (payload_start); 
 
@@ -206,7 +208,7 @@ static void wait_callback (flux_future_t *f, void *arg)
                         "job-exec.override",
                         payload_finish, 
                         FLUX_NODEID_ANY,
-                        FLUX_RPC_STREAMING))) {
+                        0))) {
                     flux_log (h, LOG_ERR, "flux_rpc %s", "failed: job-exec.override: finish");
                     flux_future_destroy (f);
                 }
@@ -217,7 +219,6 @@ static void wait_callback (flux_future_t *f, void *arg)
             // DO a status check here to see if the RPC was successful....
            
             free (payload_finish);
-
     // Old, where we post an exception to force cleanup.        
     //    flux_jobtap_raise_exception (p, *id, "DelegationSuccess", 0, "");
     } 
