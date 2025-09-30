@@ -21,6 +21,7 @@
 #include <inttypes.h>
 #include <jansson.h>
 #include <stdint.h>
+#include <time.h>
 
 bool eventlog_entry_validate (json_t *entry)
 {
@@ -125,6 +126,8 @@ static void wait_callback (flux_future_t *f, void *arg)
     flux_jobid_t job_id; 
     bool success;
     const char *errstr;
+    flux_kvs_txn_t *txn = NULL;
+    char key[256];
 
     // Obtain the handle and do some basic logging.
     flux_t *h = flux_jobtap_get_flux(p);
@@ -148,28 +151,110 @@ static void wait_callback (flux_future_t *f, void *arg)
         // This is where we need to make changes to report success (post the alloc, start and finish events here.)
          flux_log (h, LOG_INFO, "wait_callback success: Entering our new state change tests");  
         // Post an alloc event with bypass=true
-        // Need to create a fake R here for alloc... 
         
-            if (flux_future_get (f, NULL) < 0) {
-                flux_jobtap_raise_exception (p,
-                                            *id,
-                                            "alloc", 0,
-                                            "failed to obtain future: %s",
-                                            strerror (errno));
-                flux_future_destroy (f);
+            // if (flux_future_get (f, NULL) < 0) {
+            //     flux_jobtap_raise_exception (p,
+            //                                 *id,
+            //                                 "alloc", 0,
+            //                                 "failed to obtain future: %s",
+            //                                 strerror (errno));
+            //     flux_future_destroy (f);
+            // }
+
+           // Create fake R
+            // json_t *R = json_pack("{s:i s:{s:[{s:s s:{s:s}}]}}",
+            //     "version", 1,
+            //     "execution",
+            //         "R_lite",
+            //             "rank", "0",
+            //             "children",
+            //                 "core", "0"
+            // );
+            
+            // Get current time
+                double now = time(NULL);  // Unix timestamp
+                double expiration = now + (30 * 60);  // 30 minutes from now
+                
+                // Create R without properties
+                json_t *R = json_pack("{s:i s:{s:[{s:s s:{s:s}}] s:[s] s:f s:f}}",
+                    "version", 1,
+                    "execution",
+                        "R_lite",
+                            "rank", "0",
+                            "children",
+                                "core", "0",
+                        "nodelist", "localhost",
+                        "starttime", now,
+                        "expiration", expiration
+                );
+                
+                if (!R) {
+                    flux_log_error(h, "Failed to create R");
+                    return;
+                }
+                else {
+                    flux_log(h, LOG_INFO, "Successfully created R: %s", json_dumps(R, 0));
+                }
+                
+            // Create KVS transaction
+            if (!(txn = flux_kvs_txn_create())) {
+                json_decref(R);
+                return;
             }
             
+            // Build KVS key for R
+            if (flux_job_kvs_key(key, sizeof(key), job_id, "R") < 0) {
+                    flux_log(h, LOG_INFO, "failed to build KVS key for R");
+                    flux_future_destroy(f);
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return;
+            }
+            
+            // Pack R into transaction
+            if (flux_kvs_txn_pack(txn, 0, key, "O", R) < 0) {
+                    flux_log(h, LOG_INFO, "failed to pack R into txn");
+                    flux_future_destroy(f);
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return;
+            }
+            
+            // Commit the transaction
+            if (!(f = flux_kvs_commit(h, NULL, 0, txn))) {
+                    flux_log(h, LOG_INFO, "failed to commit R to KVS");
+                    flux_future_destroy(f);
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return;
+            }
+            
+            // // Wait for commit to complete
+            if (flux_future_get(f, NULL) < 0) {
+                 flux_jobtap_raise_exception (p,
+                                                 *id,
+                                                "alloc", 0,
+                                                "failed to post alloc event: %s",
+                                                strerror (errno));
+                    flux_log(h,LOG_INFO, "KVS commit failed");
+                    flux_future_destroy(f);
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return;
+            }
+
             if (flux_jobtap_event_post_pack (p,
                                             *id,
                                             "alloc",
                                             "{s:b}",
                                             "bypass", true) < 0) {
-                        flux_jobtap_raise_exception (p,
+                                                flux_log(h,LOG_INFO, "alloc event packing failed");
+                                                flux_jobtap_raise_exception (p,
                                                  *id,
                                                 "alloc", 0,
                                                 "failed to post alloc event: %s",
                                                 strerror (errno));
-                        flux_future_destroy (f);
+                                    flux_future_destroy (f);
             }
 
             // Post start and finish RPC to job-exec override 
