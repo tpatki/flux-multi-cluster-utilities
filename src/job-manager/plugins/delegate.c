@@ -117,13 +117,12 @@ static int eventlog_entry_parse (json_t *entry,
 }
 
 /*
- * Continuation callback after returning R  in wait_callback.
+ * Continuation callback, utilized after returning R in SCHED state.
  */
 static void alloc_continuation (flux_future_t *f, void *arg)
 {
     flux_plugin_t *p = arg;
     json_int_t *id;
-    // flux_jobid_t job_id;
 
     flux_t *h = flux_jobtap_get_flux(p);
     flux_log (h, LOG_INFO, "alloc_continuation: enter."); 
@@ -138,8 +137,6 @@ static void alloc_continuation (flux_future_t *f, void *arg)
         return;
     }
 
-   //  job_id = (flux_jobid_t)*id;
-
     if (flux_future_get (f, NULL) < 0) {
         flux_log (h, LOG_INFO, "alloc_continuation: flux_future_get_failed."); 
 
@@ -150,6 +147,7 @@ static void alloc_continuation (flux_future_t *f, void *arg)
                                       strerror (errno));
         goto done;
     }
+
     if (flux_jobtap_event_post_pack (p,
                                      *id,
                                      "alloc",
@@ -168,22 +166,15 @@ static void alloc_continuation (flux_future_t *f, void *arg)
     flux_future_destroy (f); 
 }
 
-
 /*
  * Callback firing when job has completed.
  */
 static void wait_callback (flux_future_t *f, void *arg)
 {
     flux_plugin_t *p = arg;
-    // flux_plugin_arg_t *args = NULL;
-    flux_plugin_arg_t *args = flux_plugin_arg_create ();
     json_int_t *id;
-    flux_jobid_t job_id; 
     bool success;
     const char *errstr;
-    flux_kvs_txn_t *txn = NULL;
-    char key[256];
-    flux_future_t *alloc_future = NULL;
 
     // Obtain the handle and do some basic logging.
     flux_t *h = flux_jobtap_get_flux(p);
@@ -193,8 +184,6 @@ static void wait_callback (flux_future_t *f, void *arg)
         return;
     }
 
-    job_id = (flux_jobid_t)*id;
-
     if (flux_job_wait_get_status (f, &success, &errstr) < 0) {
         flux_jobtap_raise_exception (p,
                                      *id,
@@ -203,180 +192,12 @@ static void wait_callback (flux_future_t *f, void *arg)
                                      "Could not fetch result of job");
         return;
     }
-    if (success) { // Delegated job has succeeded on the specified instance
-        // This is where we need to make changes to report success (post the alloc, start and finish events here.)
-         flux_log (h, LOG_INFO, "wait_callback success: Entering our new state change tests");  
-            // Get current time
-            //     double now = time(NULL);  // Unix timestamp
-            //     double expiration = now + (30 * 60);  // 30 minutes from now
-                
-                // Create a fake R without properties
-                json_t *R = json_pack("{s:i s:{s:[{s:s s:{s:s}}]}}",
-                    "version", 1,
-                    "execution",
-                        "R_lite",
-                            "rank", "0",
-                            "children",
-                                "core", "0"
-                    );
-                // json_pack("{s:i s:{s:[{s:s s:{s:s}}]s:f s:f}}
-                // "starttime", now,
-                // "expiration", expiration
-                
-                if (!R) {
-                    flux_log_error(h, "Failed to create R");
-                    return;
-                }
-                else {
-                    flux_log(h, LOG_INFO, "Successfully created R: %s", json_dumps(R, 0));
-                }
-
-            // Create KVS transaction
-            if (!(txn = flux_kvs_txn_create())) {
-                json_decref(R);
-                return;
-            }
-            
-            // Build KVS key for R
-            if (flux_job_kvs_key(key, sizeof(key), job_id, "R") < 0) {
-                    flux_log(h, LOG_INFO, "failed to build KVS key for R");
-                    flux_future_destroy(f);
-                    flux_kvs_txn_destroy(txn);
-                    json_decref(R);
-                    return;
-            }
-            
-            // Pack R into transaction
-            if (flux_kvs_txn_pack(txn, 0, key, "O", R) < 0) {
-                    flux_log(h, LOG_INFO, "failed to pack R into txn");
-                    flux_future_destroy(f);
-                    flux_kvs_txn_destroy(txn);
-                    json_decref(R);
-                    return;
-            }
-            
-            // Commit the transaction
-            if (!(alloc_future = flux_kvs_commit(h, NULL, 0, txn))) {
-                    flux_log(h, LOG_INFO, "failed to commit R to KVS");
-                    flux_future_destroy(f);
-                    flux_kvs_txn_destroy(txn);
-                    json_decref(R);
-                    return;
-            }
-             else {
-                    flux_log(h, LOG_INFO, "Successfully committed R to KVS");
-                }
-            
-            if (flux_future_aux_set (alloc_future, "flux::jobid", id, NULL) < 0) {
-                    flux_log(h,LOG_INFO, "Flux future aux set failed.");
-                    flux_future_destroy(f);
-                    flux_kvs_txn_destroy(txn);
-                    json_decref(R);
-                    return;
-            }
-             else {
-                    flux_log(h, LOG_INFO, "Successfully set jobid in future");
-                }
-            // // Wait for commit to complete, we need to use `flux_future_then` as it is asynchronous
-          //  if (flux_future_get(f, NULL) < 0) {
-           if (flux_future_then(alloc_future, -1, alloc_continuation, p) < 0) {
-                 flux_jobtap_raise_exception (p,
-                                                 *id,
-                                                "alloc", 0,
-                                                "failed to post alloc event: %s",
-                                                strerror (errno));
-                    flux_log(h,LOG_INFO, "Flux future then failed.");
-                    flux_future_destroy(f);
-                    flux_kvs_txn_destroy(txn);
-                    json_decref(R);
-                    return;
-            }
-             else {
-                    flux_log(h, LOG_INFO, "Somehow not entering alloc_continuation");
-               //     flux_future_destroy(alloc_future); 
-                }
-            
-            // Return the R from the jobtap plugin.
-             if (flux_plugin_arg_pack (args, FLUX_PLUGIN_ARG_OUT, "{s:O}", "R", R) < 0) {
-                    flux_log(h,LOG_INFO, "Flux plugin_arg_pack failed.");
-                    flux_future_destroy(f);
-                 //   flux_future_destroy(alloc_future);
-                    flux_kvs_txn_destroy(txn);
-                    json_decref(R);
-                    return;
-             }
-              else {
-                    flux_log(h, LOG_INFO, "Successfully returned R from jobtap plugin with arg_pack");
-                }
-
-            // if (flux_jobtap_event_post_pack (p,
-            //                                 *id,
-            //                                 "alloc",
-            //                                 "{s:b}",
-            //                                 "bypass", true) < 0) {
-            //                                     flux_log(h,LOG_INFO, "alloc event packing failed");
-            //                                     flux_jobtap_raise_exception (p,
-            //                                      *id,
-            //                                     "alloc", 0,
-            //                                     "failed to post alloc event: %s",
-            //                                     strerror (errno));
-            //                         flux_future_destroy (f);
-            // }
-
-
-/*
-            // Post start and finish RPC to job-exec override 
-             //payload: {"event": "start", "jobid": args.jobid}
-            char *payload_start = malloc (4096 * sizeof(char)); 
-            sprintf (payload_start, "{\"event\": \"start\", \"jobid\": %" PRIu64 "}", job_id);
-            flux_log(h, LOG_INFO, "start payload is: %s", payload_start); 
-
-            if (!(f = flux_rpc (h,
-                        "job-exec.override",
-                        payload_start, 
-                        FLUX_NODEID_ANY,
-                        0))) {
-                                flux_log (h, LOG_ERR, "flux_rpc %s", "failed: job-exec.override: start");
-                                flux_future_destroy (f);
-            }
-            else {
-                flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: start");
-            }
-
-            // if (!(f = flux_rpc_pack (h,
-            //             "job-exec.override",
-            //             FLUX_NODEID_ANY,
-            //             FLUX_RPC_STREAMING, "{s:s s:I}", "event", "start", "jobid", (json_int_t)job_id))) {
-            //         flux_log_error (h, "flux_rpc %s", "failed: job-exec.override: start");
-            //         flux_future_destroy (f);
-            // }
-   
-            
-            free (payload_start); 
-
-            char *payload_finish = malloc (4096 * sizeof(char)); 
-            int status = 0; //Assume success
-            sprintf (payload_finish, "{\"event\": \"finish\", \"jobid\": %" PRIu64 ", \"status\": %d}", job_id, status);
-            flux_log (h, LOG_INFO, "finish payload is: %s", payload_finish);   
-
-            if (!(f = flux_rpc (h,
-                        "job-exec.override",
-                        payload_finish, 
-                        FLUX_NODEID_ANY,
-                        0))) {
-                    flux_log (h, LOG_ERR, "flux_rpc %s", "failed: job-exec.override: finish");
-                    flux_future_destroy (f);
-                }
-            else {
-                flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: finish");
-            }
-            
-            // DO a status check here to see if the RPC was successful....
-           
-            free (payload_finish);
-    // Old, where we post an exception to force cleanup.        
-    //    flux_jobtap_raise_exception (p, *id, "DelegationSuccess", 0, "");
-    */
+    if (success) { 
+        // Delegated job has succeeded on the specified instance
+        // We need to let the job progress to the next state, 
+        // and then intercept it in the SCHED state to post the alloc, start and finish events.
+        flux_log (h, LOG_INFO, "wait_callback: Delegation was successful. This should proceed to sched_cb."); 
+        return;   
     } 
     else { //Delegated job has failed on the specified instance.
         flux_jobtap_raise_exception (p,
@@ -387,10 +208,7 @@ static void wait_callback (flux_future_t *f, void *arg)
                                      errstr);
         }    
     flux_future_destroy (f); //Need to change this later...
-    //flux_future_destroy(alloc_future); 
-        //}
 }
-
 /*
  * Callback firing when events are ready.
  */
@@ -610,8 +428,211 @@ static int depend_cb (flux_plugin_t *p,
     return 0;
 }
 
+/* Callback for when the job on the lead instance naturally enters the SCHED state */
+static int sched_cb (flux_plugin_t *p,
+                     const char *topic,
+                     flux_plugin_arg_t *args,
+                     void *arg)
+{
+    flux_t *h = flux_jobtap_get_flux (p);
+    json_int_t *id;
+    flux_jobid_t job_id; 
+    flux_kvs_txn_t *txn = NULL;
+    char key[256];
+    flux_future_t *alloc_future = NULL;
+
+    if (!h || !(id = malloc (sizeof (json_int_t)))) {
+        return flux_jobtap_reject_job (p,
+                                       args,
+                                       "error processing sched: %s",
+                                       flux_plugin_arg_strerror (args));
+    }
+
+    flux_log (h, LOG_INFO, "In Sched CB");
+
+    if (flux_plugin_arg_unpack (args,
+                                FLUX_PLUGIN_ARG_IN,
+                                "{s:I}",
+                                "id",
+                                id)
+            < 0
+        || flux_jobtap_job_aux_set (p, *id, "flux::jobid", id, free) < 0) {
+        free (id);
+        return flux_jobtap_reject_job (p,
+                                       args,
+                                       "error processing sched: %s",
+                                       flux_plugin_arg_strerror (args));
+    }
+
+    job_id = (flux_jobid_t)*id;
+     // This is where we need to make changes to report success (post the alloc, start and finish events here.)
+  
+            // Get current time
+            //     double now = time(NULL);  // Unix timestamp
+            //     double expiration = now + (30 * 60);  // 30 minutes from now
+                
+                // Create a fake R without properties
+                json_t *R = json_pack("{s:i s:{s:[{s:s s:{s:s}}]}}",
+                    "version", 1,
+                    "execution",
+                        "R_lite",
+                            "rank", "0",
+                            "children",
+                                "core", "0"
+                    );
+                // json_pack("{s:i s:{s:[{s:s s:{s:s}}]s:f s:f}}
+                // "starttime", now,
+                // "expiration", expiration
+                
+                if (!R) {
+                    flux_log_error(h, "Failed to create R");
+                    return -1;
+                }
+                else {
+                    flux_log(h, LOG_INFO, "Successfully created R: %s", json_dumps(R, 0));
+                }
+
+                 // Return the R from the jobtap plugin.
+             if (flux_plugin_arg_pack (args, FLUX_PLUGIN_ARG_OUT, "{s:O}", "R", R) < 0) {
+                    flux_log(h,LOG_INFO, "Flux plugin_arg_pack failed.");
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return -1;
+                }
+              else {
+                    flux_log(h, LOG_INFO, "Successfully returned R from jobtap plugin with arg_pack");
+                }
+
+            // Create KVS transaction
+            if (!(txn = flux_kvs_txn_create())) {
+                json_decref(R);
+                return -1;
+            }
+            
+            // Build KVS key for R
+            if (flux_job_kvs_key(key, sizeof(key), job_id, "R") < 0) {
+                    flux_log(h, LOG_INFO, "failed to build KVS key for R");
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return -1;
+            }
+            
+            // Pack R into transaction
+            if (flux_kvs_txn_pack(txn, 0, key, "O", R) < 0) {
+                    flux_log(h, LOG_INFO, "failed to pack R into txn");
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return -1;
+            }
+            
+            // Commit the transaction
+            if (!(alloc_future = flux_kvs_commit(h, NULL, 0, txn))) {
+                    flux_log(h, LOG_INFO, "failed to commit R to KVS");
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return -1;
+            }
+             else {
+                    flux_log(h, LOG_INFO, "Successfully committed R to KVS");
+                }
+            
+            if (flux_future_aux_set (alloc_future, "flux::jobid", id, NULL) < 0) {
+                    flux_log(h,LOG_INFO, "Flux future aux set failed.");
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return -1;
+            }
+             else {
+                    flux_log(h, LOG_INFO, "Successfully set jobid in future");
+                }
+            // // Wait for commit to complete, we need to use `flux_future_then` as it is asynchronous
+          //  if (flux_future_get(f, NULL) < 0) {
+           if (flux_future_then(alloc_future, -1, alloc_continuation, p) < 0) {
+                 flux_jobtap_raise_exception (p,
+                                                 *id,
+                                                "alloc", 0,
+                                                "failed to post alloc event: %s",
+                                                strerror (errno));
+                    flux_log(h,LOG_INFO, "Flux future then failed.");
+                    flux_future_destroy(f);
+                    flux_kvs_txn_destroy(txn);
+                    json_decref(R);
+                    return -1;
+            }
+             else {
+                    flux_log(h, LOG_INFO, "Somehow not entering alloc_continuation");
+               //     flux_future_destroy(alloc_future); 
+                }
+    return 0;
+
+}
+
+static int run_cb (flux_plugin_t *p,
+                     const char *topic,
+                     flux_plugin_arg_t *args,
+                     void *arg) 
+{
+    /*
+            // Post start and finish RPC to job-exec override 
+             //payload: {"event": "start", "jobid": args.jobid}
+            char *payload_start = malloc (4096 * sizeof(char)); 
+            sprintf (payload_start, "{\"event\": \"start\", \"jobid\": %" PRIu64 "}", job_id);
+            flux_log(h, LOG_INFO, "start payload is: %s", payload_start); 
+
+            if (!(f = flux_rpc (h,
+                        "job-exec.override",
+                        payload_start, 
+                        FLUX_NODEID_ANY,
+                        0))) {
+                                flux_log (h, LOG_ERR, "flux_rpc %s", "failed: job-exec.override: start");
+                                flux_future_destroy (f);
+            }
+            else {
+                flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: start");
+            }
+
+            // if (!(f = flux_rpc_pack (h,
+            //             "job-exec.override",
+            //             FLUX_NODEID_ANY,
+            //             FLUX_RPC_STREAMING, "{s:s s:I}", "event", "start", "jobid", (json_int_t)job_id))) {
+            //         flux_log_error (h, "flux_rpc %s", "failed: job-exec.override: start");
+            //         flux_future_destroy (f);
+            // }
+   
+            
+            free (payload_start); 
+
+            char *payload_finish = malloc (4096 * sizeof(char)); 
+            int status = 0; //Assume success
+            sprintf (payload_finish, "{\"event\": \"finish\", \"jobid\": %" PRIu64 ", \"status\": %d}", job_id, status);
+            flux_log (h, LOG_INFO, "finish payload is: %s", payload_finish);   
+
+            if (!(f = flux_rpc (h,
+                        "job-exec.override",
+                        payload_finish, 
+                        FLUX_NODEID_ANY,
+                        0))) {
+                    flux_log (h, LOG_ERR, "flux_rpc %s", "failed: job-exec.override: finish");
+                    flux_future_destroy (f);
+                }
+            else {
+                flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: finish");
+            }
+            
+            // DO a status check here to see if the RPC was successful....
+           
+            free (payload_finish);
+    // Old, where we post an exception to force cleanup.        
+    //    flux_jobtap_raise_exception (p, *id, "DelegationSuccess", 0, "");
+    */
+   return 0;
+
+}
+
 static const struct flux_plugin_handler tab[] = {
     {"job.dependency.delegate", depend_cb, NULL},
+    {"job.state.sched", sched_cb, NULL},
+    {"job.state.run", run_cb, NULL},
     {0},
 };
 
