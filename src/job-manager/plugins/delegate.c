@@ -196,7 +196,10 @@ static void wait_callback (flux_future_t *f, void *arg)
         // Delegated job has succeeded on the specified instance
         // We need to let the job progress to the next state, 
         // and then intercept it in the SCHED state to post the alloc, start and finish events.
-        flux_log (h, LOG_INFO, "wait_callback: Delegation was successful. This should proceed to sched_cb."); 
+        // Old way of handling was with exceptions, where we post an exception to force cleanup.        
+        //    flux_jobtap_raise_exception (p, *id, "DelegationSuccess", 0, "");
+        flux_log (h, LOG_INFO, "wait_callback: Delegation was successful. This should proceed to sched_cb (but it isnt!)."); 
+
         return;   
     } 
     else { //Delegated job has failed on the specified instance.
@@ -253,12 +256,15 @@ static void event_callback (flux_future_t *f, void *arg)
         }
     }
 
+    // DEC 2025: Why are we checking for the "clean" event and destroying/resetting future?
+    // What if we skip this? Trying to comment 261--266
     if (!strcmp (name, "clean")) {
         // clean event, no more events needed
         flux_future_destroy (f);
     } else {
         flux_future_reset (f);
     }
+
     return;
 }
 
@@ -424,6 +430,7 @@ static int depend_cb (flux_plugin_t *p,
         free (encoded_jobspec);
         return -1;
     }
+    
     free (encoded_jobspec);
     return 0;
 }
@@ -434,6 +441,8 @@ static int sched_cb (flux_plugin_t *p,
                      flux_plugin_arg_t *args,
                      void *arg)
 {
+    // DEC 2025: Somehow, these are getting called on the delegated instance instead of LEAD instance.
+    // Do we need to change the way we extract the handle, or trigger on a different event/state?
     flux_t *h = flux_jobtap_get_flux (p);
     json_int_t *id;
     flux_jobid_t job_id; 
@@ -572,6 +581,8 @@ static int run_cb (flux_plugin_t *p,
                      flux_plugin_arg_t *args,
                      void *arg) 
 {
+    // DEC 2025: Somehow, these are getting called on the delegated instance instead of LEAD instance.
+    // Do we need to change the way we extract the handle, or trigger on a different event/state?
     flux_t *h = flux_jobtap_get_flux (p);
     json_int_t *id;
     flux_jobid_t job_id; 
@@ -651,8 +662,6 @@ static int run_cb (flux_plugin_t *p,
             // DO a status check here to see if the RPC was successful....
            
             free (payload_finish);
-    // Old, where we post an exception to force cleanup.        
-    //    flux_jobtap_raise_exception (p, *id, "DelegationSuccess", 0, "");
     
    return 0;
 
@@ -660,6 +669,8 @@ static int run_cb (flux_plugin_t *p,
 
 static const struct flux_plugin_handler tab[] = {
     {"job.dependency.delegate", depend_cb, NULL},
+    // DEC 2025: Somehow, these two below are getting called on the delegated instance instead of LEAD instance.
+    // Do we need to change the way we extract the handle, or trigger on a different event/state?
     {"job.state.sched", sched_cb, NULL},
     {"job.state.run", run_cb, NULL},
     {0},
