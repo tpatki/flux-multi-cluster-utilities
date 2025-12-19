@@ -554,7 +554,7 @@ static int sched_cb (flux_plugin_t *p,
                                                 "failed to post alloc event: %s",
                                                 strerror (errno));
                     flux_log(h,LOG_INFO, "Flux future then failed.");
-                    flux_future_destroy(f);
+                    flux_future_destroy(alloc_future);
                     flux_kvs_txn_destroy(txn);
                     json_decref(R);
                     return -1;
@@ -575,6 +575,7 @@ static int run_cb (flux_plugin_t *p,
     flux_t *h = flux_jobtap_get_flux (p);
     json_int_t *id;
     flux_jobid_t job_id; 
+    flux_future_t *run_future; 
     
     if (!h || !(id = malloc (sizeof (json_int_t)))) {
         return flux_jobtap_reject_job (p,
@@ -607,13 +608,13 @@ static int run_cb (flux_plugin_t *p,
             sprintf (payload_start, "{\"event\": \"start\", \"jobid\": %" PRIu64 "}", job_id);
             flux_log(h, LOG_INFO, "start payload is: %s", payload_start); 
 
-            if (!(f = flux_rpc (h,
+            if (!(run_future = flux_rpc (h,
                         "job-exec.override",
                         payload_start, 
                         FLUX_NODEID_ANY,
                         0))) {
                                 flux_log (h, LOG_ERR, "flux_rpc %s", "failed: job-exec.override: start");
-                                flux_future_destroy (f);
+                                flux_future_destroy (run_future);
             }
             else {
                 flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: start");
@@ -635,13 +636,13 @@ static int run_cb (flux_plugin_t *p,
             sprintf (payload_finish, "{\"event\": \"finish\", \"jobid\": %" PRIu64 ", \"status\": %d}", job_id, status);
             flux_log (h, LOG_INFO, "finish payload is: %s", payload_finish);   
 
-            if (!(f = flux_rpc (h,
+            if (!(run_future = flux_rpc (h,
                         "job-exec.override",
                         payload_finish, 
                         FLUX_NODEID_ANY,
                         0))) {
                     flux_log (h, LOG_ERR, "flux_rpc %s", "failed: job-exec.override: finish");
-                    flux_future_destroy (f);
+                    flux_future_destroy (run_future);
                 }
             else {
                 flux_log (h, LOG_INFO, "flux_rpc %s", "successfully posted: job-exec.override: finish");
