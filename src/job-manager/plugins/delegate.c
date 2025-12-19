@@ -572,7 +572,35 @@ static int run_cb (flux_plugin_t *p,
                      flux_plugin_arg_t *args,
                      void *arg) 
 {
-    /*
+    flux_t *h = flux_jobtap_get_flux (p);
+    json_int_t *id;
+    flux_jobid_t job_id; 
+    
+    if (!h || !(id = malloc (sizeof (json_int_t)))) {
+        return flux_jobtap_reject_job (p,
+                                       args,
+                                       "error processing sched: %s",
+                                       flux_plugin_arg_strerror (args));
+    }
+
+    flux_log (h, LOG_INFO, "In Run CB");
+
+    if (flux_plugin_arg_unpack (args,
+                                FLUX_PLUGIN_ARG_IN,
+                                "{s:I}",
+                                "id",
+                                id)
+            < 0
+        || flux_jobtap_job_aux_set (p, *id, "flux::jobid", id, free) < 0) {
+        free (id);
+        return flux_jobtap_reject_job (p,
+                                       args,
+                                       "error processing sched: %s",
+                                       flux_plugin_arg_strerror (args));
+    }
+
+    job_id = (flux_jobid_t)*id;
+
             // Post start and finish RPC to job-exec override 
              //payload: {"event": "start", "jobid": args.jobid}
             char *payload_start = malloc (4096 * sizeof(char)); 
@@ -624,7 +652,7 @@ static int run_cb (flux_plugin_t *p,
             free (payload_finish);
     // Old, where we post an exception to force cleanup.        
     //    flux_jobtap_raise_exception (p, *id, "DelegationSuccess", 0, "");
-    */
+    
    return 0;
 
 }
